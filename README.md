@@ -1,6 +1,6 @@
 # ChzzkUnity
-Unity Chzzk chatting/donation Connection
+Unity Chzzk chatting/donation Connection<br><br>
 
-External dependencies:
-     websocket-sharp
+External dependencies:<br>
+     websocket-sharp<br>
      https://github.com/sta/websocket-sharp?tab=readme-ov-file

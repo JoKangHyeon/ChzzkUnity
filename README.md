@@ -1,5 +1,6 @@
 # ChzzkUnity
 Unity Chzzk chatting/donation Connection<br><br>
+유니티 치지직 채팅/도네이션 연결
 
 External dependencies:<br>
      websocket-sharp<br>

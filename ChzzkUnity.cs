@@ -6,12 +6,12 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.Networking;
 using WebSocketSharp;
 
 public class ChzzkUnity : MonoBehaviour
 {
-
     //WSS(WS 말고 WSS) 쓰려면 필요함.
     private enum SslProtocolsHack
     {
@@ -33,24 +33,45 @@ public class ChzzkUnity : MonoBehaviour
     string heartbeatRequest = "{\"ver\":\"2\",\"cmd\":0}";
     string heartbeatResponse = "{\"ver\":\"2\",\"cmd\":10000}";
 
-    public Action<Profile, string> onMessage = (profile,str) => {};
-    public Action<Profile, string, DonationExtras> onDonation = (profile, str, extra) => { };
+    #region Callbacks
+    
+    public UnityEvent<Profile, string> onMessage = new();
+    public UnityEvent<Profile, string, DonationExtras> onDonation = new();
+    public UnityEvent<Profile, SubscriptionExtras> onSubscription = new();
+
+    #endregion Callbacks
 
     // Start is called before the first frame update
     void Start()
     {
-        
+        onMessage.AddListener(DebugMessage);
+        onDonation.AddListener(DebugDonation);
+        onSubscription.AddListener(DebugSubscription);
     }
 
-    public void removeAllOnMessageListener() 
+    #region Debug Methods
+
+    private void DebugMessage(Profile profile, string str)
     {
-        onMessage = (profile, str) => { };
+        Debug.Log($"| [Message] {profile.nickname} - {str}");
+    }
+    private void DebugDonation(Profile profile, string str, DonationExtras donation)
+    {
+        //isAnonymous가 true면 profile은 null임을 유의
+        Debug.Log(donation.isAnonymous
+            ? $"| [Donation] 익명 - {str} - {donation.payAmount}/{donation.payType}"
+            : $"| [Donation] {profile.nickname} - {str} - {donation.payAmount}/{donation.payType}");
+    }
+    private void DebugSubscription(Profile profile, SubscriptionExtras subscription)
+    {
+        Debug.Log($"| [Subscription] {profile.nickname} - {subscription.month}");
     }
 
-    public void removeAllOnDonationListener()
-    {
-        onMessage = (profile, str) => { };
-    }
+    #endregion Debug Methods
+    
+    public void RemoveAllOnMessageListener() => onMessage.RemoveAllListeners();
+    public void RemoveAllOnDonationListener() => onDonation.RemoveAllListeners();
+    public void RemoveAllOnSubscriptionListener() => onSubscription.RemoveAllListeners();
 
     //20초에 한번 HeartBeat 전송해야 함.
     //서버에서 먼저 요청하면 안 해도 됨.
@@ -171,9 +192,9 @@ public class ChzzkUnity : MonoBehaviour
                     profileText = profileText.Replace("\\", "");
                     Profile profile = JsonUtility.FromJson<Profile>(profileText);
 
-                    onMessage(profile, bdyObject["msg"].ToString().Trim()) ;
+                    onMessage?.Invoke(profile, bdyObject["msg"].ToString().Trim()) ;
                     break;
-                case 93102://Donation
+                case 93102://Donation & Subscription
                     bdy = (JArray)data["bdy"];
                     bdyObject = (JObject)bdy[0];
 
@@ -182,14 +203,28 @@ public class ChzzkUnity : MonoBehaviour
                     profileText = profileText.Replace("\\", "");
                     profile = JsonUtility.FromJson<Profile>(profileText);
 
-                    //도네이션과 관련된 데이터는 extra
-                    string extraText = bdyObject["extra"].ToString();
+                    var msgTypeCode = int.Parse(bdyObject["msgTypeCode"].ToString());
+                    //도네이션 및 구독과 관련된 데이터는 extras
+                    string extraText = bdyObject["extras"].ToString();
                     extraText = extraText.Replace("\\", "");
-                    DonationExtras extras = JsonUtility.FromJson<DonationExtras>(extraText);
 
-
-                    onDonation(profile, bdyObject["msg"].ToString(), extras);
+                    switch (msgTypeCode)
+                    {
+                        case 10: // Donation
+                            var donation = JsonUtility.FromJson<DonationExtras>(extraText);
+                            onDonation?.Invoke(profile, bdyObject["msg"].ToString(), donation);
+                            break;
+                        case 11: // Subscription
+                            var subscription = JsonUtility.FromJson<SubscriptionExtras>(extraText);
+                            onSubscription?.Invoke(profile, subscription);
+                            break;
+                        default:
+                            Debug.LogError($"MessageTypeCode-{msgTypeCode} is not supported");
+                            Debug.LogError(bdyObject.ToString());
+                            break;
+                    }
                     break;
+                case 93006://Temporary Restrict 블라인드 처리된 메세지.
                 case 94008://Blocked Message(CleanBot) 차단된 메세지.
                 case 94201://Member Sync 멤버 목록 동기화.
                 case 10000://HeartBeat Response 하트비트 응답.
@@ -318,6 +353,14 @@ public class ChzzkUnity : MonoBehaviour
         }
     }
 
+    [Serializable]
+    public class SubscriptionExtras
+    {
+        public int month;
+        public string tierName;
+        public string nickname;
+        public int tierNo;
+    }
 
     [Serializable]
     public class DonationExtras

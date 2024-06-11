@@ -1,10 +1,8 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Networking;
@@ -12,6 +10,8 @@ using WebSocketSharp;
 
 public class ChzzkUnity : MonoBehaviour
 {
+    #region Variables
+
     //WSS(WS 말고 WSS) 쓰려면 필요함.
     private enum SslProtocolsHack
     {
@@ -19,19 +19,19 @@ public class ChzzkUnity : MonoBehaviour
         Tls11 = 768,
         Tls12 = 3072
     }
+    
+    private const string WS_URL = "wss://kr-ss3.chat.naver.com/chat";
+    private const string HEARTBEAT_REQUEST = "{\"ver\":\"2\",\"cmd\":0}";
+    private const string HEARTBEAT_RESPONSE = "{\"ver\":\"2\",\"cmd\":10000}";
 
     string cid;
     string token;
     public string channel;
 
     WebSocket socket = null;
-    string wsURL = "wss://kr-ss3.chat.naver.com/chat";
 
     float timer = 0f;
     bool running = false;
-
-    string heartbeatRequest = "{\"ver\":\"2\",\"cmd\":0}";
-    string heartbeatResponse = "{\"ver\":\"2\",\"cmd\":10000}";
 
     #region Callbacks
     
@@ -40,7 +40,11 @@ public class ChzzkUnity : MonoBehaviour
     public UnityEvent<Profile, SubscriptionExtras> onSubscription = new();
 
     #endregion Callbacks
+    
+    #endregion Variables
 
+    #region Unity Methods
+    
     // Start is called before the first frame update
     void Start()
     {
@@ -48,7 +52,30 @@ public class ChzzkUnity : MonoBehaviour
         onDonation.AddListener(DebugDonation);
         onSubscription.AddListener(DebugSubscription);
     }
+    
+    //20초에 한번 HeartBeat 전송해야 함.
+    //서버에서 먼저 요청하면 안 해도 됨.
+    //TimeScale에 영향 안 받기 위해서 Fixed
+    void FixedUpdate()
+    {
+        if (running)
+        {
+            timer += Time.unscaledDeltaTime;
+            if (timer > 15)
+            {
+                socket.Send(HEARTBEAT_REQUEST);
+                timer = 0;
+            }
+        }
+    }
 
+    private void OnDestroy()
+    {
+        StopListening();
+    }
+    
+    #endregion Unity Methods
+    
     #region Debug Methods
 
     private void DebugMessage(Profile profile, string str)
@@ -68,31 +95,17 @@ public class ChzzkUnity : MonoBehaviour
     }
 
     #endregion Debug Methods
+
+    #region Public Methods
     
     public void RemoveAllOnMessageListener() => onMessage.RemoveAllListeners();
     public void RemoveAllOnDonationListener() => onDonation.RemoveAllListeners();
     public void RemoveAllOnSubscriptionListener() => onSubscription.RemoveAllListeners();
-
-    //20초에 한번 HeartBeat 전송해야 함.
-    //서버에서 먼저 요청하면 안 해도 됨.
-    //TimeScale에 영향 안 받기 위해서 Fixed
-    void FixedUpdate()
-    {
-        if (running)
-        {
-            timer += Time.unscaledDeltaTime;
-            if (timer > 15)
-            {
-                socket.Send(heartbeatRequest);
-                timer = 0;
-            }
-        }
-    }
     
-    public async Task<ChannelInfo> GetChannelInfo(string channelId)
+    public async UniTask<ChannelInfo> GetChannelInfo(string channelId)
     {
-        string URL = $"https://api.chzzk.naver.com/service/v1/channels/{channelId}";
-        UnityWebRequest request = UnityWebRequest.Get(URL);
+        var url = $"https://api.chzzk.naver.com/service/v1/channels/{channelId}";
+        var request = UnityWebRequest.Get(url);
         await request.SendWebRequest();
         ChannelInfo channelInfo = null;
         Debug.Log(request.downloadHandler.text);
@@ -104,10 +117,10 @@ public class ChzzkUnity : MonoBehaviour
         return channelInfo;
     }
 
-    public async Task<LiveStatus> GetLiveStatus(string channelId)
+    public async UniTask<LiveStatus> GetLiveStatus(string channelId)
     {
-        string URL = $"https://api.chzzk.naver.com/polling/v2/channels/{channelId}/live-status";
-        UnityWebRequest request = UnityWebRequest.Get(URL);
+        var url = $"https://api.chzzk.naver.com/polling/v2/channels/{channelId}/live-status";
+        var request = UnityWebRequest.Get(url);
         await request.SendWebRequest();
         LiveStatus liveStatus = null;
         if (request.result == UnityWebRequest.Result.Success)
@@ -119,10 +132,10 @@ public class ChzzkUnity : MonoBehaviour
         return liveStatus;
     }
 
-    public async Task<AccessTokenResult> GetAccessToken(string cid)
+    public async UniTask<AccessTokenResult> GetAccessToken(string cid)
     {
-        string URL = $"https://comm-api.game.naver.com/nng_main/v1/chats/access-token?channelId={cid}&chatType=STREAMING";
-        UnityWebRequest request = UnityWebRequest.Get(URL);
+        var url = $"https://comm-api.game.naver.com/nng_main/v1/chats/access-token?channelId={cid}&chatType=STREAMING";
+        var request = UnityWebRequest.Get(url);
         await request.SendWebRequest();
         AccessTokenResult accessTokenResult = null;
         if (request.result == UnityWebRequest.Result.Success)
@@ -134,7 +147,7 @@ public class ChzzkUnity : MonoBehaviour
         return accessTokenResult;
     }
 
-    public async void Connect()
+    public async UniTask Connect()
     {
         if (socket != null && socket.IsAlive)
         {
@@ -147,28 +160,39 @@ public class ChzzkUnity : MonoBehaviour
         AccessTokenResult accessTokenResult = await GetAccessToken(cid);
         token = accessTokenResult.content.accessToken;
         
-        socket = new WebSocket(wsURL);
+        socket = new WebSocket(WS_URL);
         //wss라서 ssl protocol을 활성화 해줘야 함.
         var sslProtocolHack = (System.Security.Authentication.SslProtocols)(SslProtocolsHack.Tls12 | SslProtocolsHack.Tls11 | SslProtocolsHack.Tls);
         socket.SslConfiguration.EnabledSslProtocols = sslProtocolHack;
 
         //이벤트 등록
-        socket.OnMessage += Recv;
+        socket.OnMessage += ParseMessage;
         socket.OnClose += CloseConnect;
-        socket.OnOpen += OnStartChat;
+        socket.OnOpen += StartChat;
 
         //연결
         socket.Connect();
+        await UniTask.CompletedTask;
     }
 
     public void Connect(string channelId)
     {
         channel = channelId;
-        Connect();
+        Connect().Forget();
     }
 
+    public void StopListening()
+    {
+        if (socket == null) return;
+        socket.Close();
+        socket = null;
+    }
+    
+    #endregion Public Methods
 
-    void Recv(object sender, MessageEventArgs e)
+    #region Socket Event Handlers
+
+    private void ParseMessage(object sender, MessageEventArgs e)
     {
         try
         {                
@@ -179,7 +203,7 @@ public class ChzzkUnity : MonoBehaviour
             {
                 case 0://HeartBeat Request
                     //하트비트 응답해줌.
-                    socket.Send(heartbeatResponse);
+                    socket.Send(HEARTBEAT_RESPONSE);
                     //서버가 먼저 요청해서 응답했으면 타이머 초기화해도 괜찮음.
                     timer = 0;
                     break;
@@ -244,7 +268,7 @@ public class ChzzkUnity : MonoBehaviour
         }
     }
 
-    void CloseConnect(object sender, CloseEventArgs e)
+    private void CloseConnect(object sender, CloseEventArgs e)
     {
         Debug.Log(e.Reason);
         Debug.Log(e.Code);
@@ -262,23 +286,20 @@ public class ChzzkUnity : MonoBehaviour
         }
     }
 
-    void OnStartChat(object sender, EventArgs e)
+    private void StartChat(object sender, EventArgs e)
     {
         Debug.Log($"OPENED : {cid} + {token}");
         
-        string message = $"{{\"ver\":\"2\",\"cmd\":100,\"svcid\":\"game\",\"cid\":\"{cid}\",\"bdy\":{{\"uid\":null,\"devType\":2001,\"accTkn\":\"{token}\",\"auth\":\"READ\"}},\"tid\":1}}";
+        var message = $"{{\"ver\":\"2\",\"cmd\":100,\"svcid\":\"game\",\"cid\":\"{cid}\",\"bdy\":{{\"uid\":null,\"devType\":2001,\"accTkn\":\"{token}\",\"auth\":\"READ\"}},\"tid\":1}}";
         timer = 0;
         running = true;
         socket.Send(message);
     }
 
+    #endregion Socket Event Handlers
 
+    #region Sub-classes
 
-    public void StopListening()
-    {
-        socket.Close();
-        socket = null;
-    }
 
     [Serializable]
     public class LiveStatus
@@ -407,4 +428,6 @@ public class ChzzkUnity : MonoBehaviour
             public bool openLive;
         }
     }
+
+    #endregion Sub-classes
 }

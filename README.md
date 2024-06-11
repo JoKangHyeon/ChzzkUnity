@@ -6,5 +6,8 @@ External dependencies:<br>
      websocket-sharp<br>
           https://github.com/sta/websocket-sharp?tab=readme-ov-file<br>
      Newtonsoft.Json<br>
-          https://www.nuget.org/packages/Newtonsoft.Json/
+          https://www.nuget.org/packages/Newtonsoft.Json/<br>
+     UniTask<br>
+          https://github.com/Cysharp/UniTask
+ 
  

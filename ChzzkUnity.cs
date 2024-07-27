@@ -3,8 +3,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -37,8 +35,8 @@ public class ChzzkUnity : MonoBehaviour
     public Action<Profile, string> onMessage = (profile, str) => { };
     public Action<Profile, string, DonationExtras> onDonation = (profile, str, extra) => { };
     public Action onClose = () => { };
-    public Action onOpen= () => { };
-    
+    public Action onOpen = () => { };
+
     int closedCount = 0;
     bool reOpenTrying = false;
 
@@ -63,7 +61,7 @@ public class ChzzkUnity : MonoBehaviour
         if (closedCount > 0)
         {
             onClose();
-            if(!reOpenTrying)
+            if (!reOpenTrying)
                 StartCoroutine(TryReOpen());
             closedCount--;
         }
@@ -75,7 +73,6 @@ public class ChzzkUnity : MonoBehaviour
         yield return new WaitForSeconds(1);
         if (!socket.IsAlive)
         {
-            //Debug.Log("쥬금");
             socket.Connect();
         }
 
@@ -117,7 +114,6 @@ public class ChzzkUnity : MonoBehaviour
             }
         }
     }
-    //https://api.chzzk.naver.com/service/v1/channels/cf83a6b1cf3168d8bbd653e2873f060a
 
     public async Task<ChannelInfo> GetChannelInfo(string channelId)
     {
@@ -173,8 +169,6 @@ public class ChzzkUnity : MonoBehaviour
         }
 
         LiveStatus liveStatus = await GetLiveStatus(channel);
-        //Debug.Log(liveStatus);
-        //Debug.Log(channel);
         cid = liveStatus.content.chatChannelId;
         AccessTokenResult accessTokenResult = await GetAccessToken(cid);
         token = accessTokenResult.content.accessToken;
@@ -246,7 +240,7 @@ public class ChzzkUnity : MonoBehaviour
                     profile = JsonUtility.FromJson<Profile>(profileText);
 
                     //도네이션과 관련된 데이터는 extra
-                    string extraText=null;
+                    string extraText = null;
                     if (bdyObject.ContainsKey("extra"))
                     {
                         extraText = bdyObject["extra"].ToString();
@@ -255,11 +249,11 @@ public class ChzzkUnity : MonoBehaviour
                     {
                         extraText = bdyObject["extras"].ToString();
                     }
-                    
+
                     extraText = extraText.Replace("\\", "");
                     DonationExtras extras = JsonUtility.FromJson<DonationExtras>(extraText);
 
-                    
+
                     onDonation(profile, bdyObject["msg"].ToString(), extras);
                     break;
                 case 94008://Blocked Message(CleanBot) 차단된 메세지.
@@ -273,8 +267,8 @@ public class ChzzkUnity : MonoBehaviour
                     break;//Nothing to do
                 default:
                     //내가 놓친 cmd가 있나?
-                    Debug.Log(data["cmd"]);
-                    Debug.Log(e.Data);
+                    //Debug.Log(data["cmd"]);
+                    //Debug.Log(e.Data);
                     break;
             }
         }
@@ -285,10 +279,11 @@ public class ChzzkUnity : MonoBehaviour
         }
     }
 
-    
+
 
     async void CloseConnect(object sender, CloseEventArgs e)
     {
+        Debug.LogError("연결이 해제되었습니다");
         Debug.Log(e.Reason);
         Debug.Log(e.Code);
         Debug.Log(e);

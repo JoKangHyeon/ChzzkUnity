@@ -2,11 +2,14 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Networking;
 using WebSocketSharp;
+using System.Collections;
+using System.Threading.Tasks;
+using Unity.VisualScripting;
+using Cysharp.Threading.Tasks;
 
 public class ChzzkUnity : MonoBehaviour
 {
@@ -19,7 +22,7 @@ public class ChzzkUnity : MonoBehaviour
         Tls11 = 768,
         Tls12 = 3072
     }
-    
+
     private const string WS_URL = "wss://kr-ss3.chat.naver.com/chat";
     private const string HEARTBEAT_REQUEST = "{\"ver\":\"2\",\"cmd\":0}";
     private const string HEARTBEAT_RESPONSE = "{\"ver\":\"2\",\"cmd\":10000}";
@@ -34,17 +37,24 @@ public class ChzzkUnity : MonoBehaviour
     bool running = false;
 
     #region Callbacks
-    
+
     public UnityEvent<Profile, string> onMessage = new();
     public UnityEvent<Profile, string, DonationExtras> onDonation = new();
     public UnityEvent<Profile, SubscriptionExtras> onSubscription = new();
+    public UnityEvent onClose = new();
+    public UnityEvent onOpen = new();
 
     #endregion Callbacks
-    
+
     #endregion Variables
 
+
+
+    int closedCount = 0;
+    bool reOpenTrying = false;
+
     #region Unity Methods
-    
+
     // Start is called before the first frame update
     void Start()
     {
@@ -53,12 +63,34 @@ public class ChzzkUnity : MonoBehaviour
         onSubscription.AddListener(DebugSubscription);
     }
     
+    private void Update()
+    {
+        if (closedCount > 0)
+        {
+            onClose?.Invoke();
+            if (!reOpenTrying)
+                StartCoroutine(TryReOpen());
+            closedCount--;
+        }
+    }
+    
+    public IEnumerator TryReOpen()
+    {
+        reOpenTrying = true;
+        yield return new WaitForSeconds(1);
+        if (!socket.IsAlive)
+        {
+            socket.Connect();
+        }
+        reOpenTrying = false;
+    }
+
     //20초에 한번 HeartBeat 전송해야 함.
     //서버에서 먼저 요청하면 안 해도 됨.
     //TimeScale에 영향 안 받기 위해서 Fixed
     void FixedUpdate()
     {
-        if (running)
+        if (running && socket.IsAlive)
         {
             timer += Time.unscaledDeltaTime;
             if (timer > 15)
@@ -73,9 +105,9 @@ public class ChzzkUnity : MonoBehaviour
     {
         StopListening();
     }
-    
+
     #endregion Unity Methods
-    
+
     #region Debug Methods
 
     private void DebugMessage(Profile profile, string str)
@@ -97,18 +129,18 @@ public class ChzzkUnity : MonoBehaviour
     #endregion Debug Methods
 
     #region Public Methods
-    
+
     public void RemoveAllOnMessageListener() => onMessage.RemoveAllListeners();
     public void RemoveAllOnDonationListener() => onDonation.RemoveAllListeners();
     public void RemoveAllOnSubscriptionListener() => onSubscription.RemoveAllListeners();
-    
+
     public async UniTask<ChannelInfo> GetChannelInfo(string channelId)
     {
         var url = $"https://api.chzzk.naver.com/service/v1/channels/{channelId}";
         var request = UnityWebRequest.Get(url);
         await request.SendWebRequest();
         ChannelInfo channelInfo = null;
-        Debug.Log(request.downloadHandler.text);
+        //Debug.Log(request.downloadHandler.text);
         if (request.result == UnityWebRequest.Result.Success)
         {
             //Cid 획득
@@ -159,8 +191,8 @@ public class ChzzkUnity : MonoBehaviour
         cid = liveStatus.content.chatChannelId;
         AccessTokenResult accessTokenResult = await GetAccessToken(cid);
         token = accessTokenResult.content.accessToken;
-        
         socket = new WebSocket(WS_URL);
+
         //wss라서 ssl protocol을 활성화 해줘야 함.
         var sslProtocolHack = (System.Security.Authentication.SslProtocols)(SslProtocolsHack.Tls12 | SslProtocolsHack.Tls11 | SslProtocolsHack.Tls);
         socket.SslConfiguration.EnabledSslProtocols = sslProtocolHack;
@@ -187,7 +219,7 @@ public class ChzzkUnity : MonoBehaviour
         socket.Close();
         socket = null;
     }
-    
+
     #endregion Public Methods
 
     #region Socket Event Handlers
@@ -195,9 +227,9 @@ public class ChzzkUnity : MonoBehaviour
     private void ParseMessage(object sender, MessageEventArgs e)
     {
         try
-        {                
-            IDictionary<string, object> data = JsonConvert.DeserializeObject<IDictionary<string, object>>(e.Data);            
-
+        {
+            IDictionary<string, object> data = JsonConvert.DeserializeObject<IDictionary<string, object>>(e.Data);
+            Debug.Log(e.Data);
             //Cmd에 따라서
             switch ((long)data["cmd"])
             {
@@ -215,8 +247,8 @@ public class ChzzkUnity : MonoBehaviour
                     string profileText = bdyObject["profile"].ToString();
                     profileText = profileText.Replace("\\", "");
                     Profile profile = JsonUtility.FromJson<Profile>(profileText);
+                    onMessage?.Invoke(profile, bdyObject["msg"].ToString().Trim());
 
-                    onMessage?.Invoke(profile, bdyObject["msg"].ToString().Trim()) ;
                     break;
                 case 93102://Donation & Subscription
                     bdy = (JArray)data["bdy"];
@@ -228,8 +260,17 @@ public class ChzzkUnity : MonoBehaviour
                     profile = JsonUtility.FromJson<Profile>(profileText);
 
                     var msgTypeCode = int.Parse(bdyObject["msgTypeCode"].ToString());
-                    //도네이션 및 구독과 관련된 데이터는 extras
-                    string extraText = bdyObject["extras"].ToString();
+                    //도네이션과 관련된 데이터는 extra
+                    string extraText = null;
+                    if (bdyObject.ContainsKey("extra"))
+                    {
+                        extraText = bdyObject["extra"].ToString();
+                    }
+                    else if (bdyObject.ContainsKey("extras"))
+                    {
+                        extraText = bdyObject["extras"].ToString();
+                    }
+
                     extraText = extraText.Replace("\\", "");
 
                     switch (msgTypeCode)
@@ -252,44 +293,39 @@ public class ChzzkUnity : MonoBehaviour
                 case 94008://Blocked Message(CleanBot) 차단된 메세지.
                 case 94201://Member Sync 멤버 목록 동기화.
                 case 10000://HeartBeat Response 하트비트 응답.
+                    break;
                 case 10100://Token ACC
+                    //Debug.Log(data["cmd"]);
+                    //Debug.Log(e.Data);
+                    onOpen?.Invoke();
                     break;//Nothing to do
                 default:
                     //내가 놓친 cmd가 있나?
-                    Debug.LogError(data["cmd"]);
-                    Debug.LogError(e.Data);
+                    //Debug.Log(data["cmd"]);
+                    //Debug.Log(e.Data);
                     break;
             }
         }
-        
+
         catch (Exception er)
         {
-            Debug.Log(er.ToString());
+            Debug.LogError(er.ToString());
         }
     }
 
     private void CloseConnect(object sender, CloseEventArgs e)
     {
+        Debug.LogError("연결이 해제되었습니다");
         Debug.Log(e.Reason);
         Debug.Log(e.Code);
         Debug.Log(e);
-
-        try
-        {
-            if (socket == null) return;
-
-            if (socket.IsAlive) socket.Close();
-        }
-        catch (Exception ex)
-        {
-            Debug.Log(ex.StackTrace);
-        }
+        closedCount += 1;
     }
 
     private void StartChat(object sender, EventArgs e)
     {
         Debug.Log($"OPENED : {cid} + {token}");
-        
+
         var message = $"{{\"ver\":\"2\",\"cmd\":100,\"svcid\":\"game\",\"cid\":\"{cid}\",\"bdy\":{{\"uid\":null,\"devType\":2001,\"accTkn\":\"{token}\",\"auth\":\"READ\"}},\"tid\":1}}";
         timer = 0;
         running = true;

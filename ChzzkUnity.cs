@@ -230,6 +230,12 @@ public class ChzzkUnity : MonoBehaviour
         {
             IDictionary<string, object> data = JsonConvert.DeserializeObject<IDictionary<string, object>>(e.Data);
             Debug.Log(e.Data);
+
+            JArray body;
+            JObject bodyObject;
+            Profile profile;
+            string profileText;
+            
             //Cmd에 따라서
             switch ((long)data["cmd"])
             {
@@ -240,54 +246,64 @@ public class ChzzkUnity : MonoBehaviour
                     timer = 0;
                     break;
                 case 93101://Chat
-                    JArray bdy = (JArray)data["bdy"];
-                    JObject bdyObject = (JObject)bdy[0];
-
-                    //프로필이.... json이 아니라 string으로 들어옴.
-                    string profileText = bdyObject["profile"].ToString();
-                    profileText = profileText.Replace("\\", "");
-                    Profile profile = JsonUtility.FromJson<Profile>(profileText);
-                    onMessage?.Invoke(profile, bdyObject["msg"].ToString().Trim());
+                    body = (JArray)data["bdy"];
+                    foreach (JToken jToken in body)
+                    {
+                        bodyObject = (JObject)jToken;
+                        //프로필이.... json이 아니라 string으로 들어옴.
+                        profileText = bodyObject["profile"]?.ToString();
+                        if (profileText != null)
+                        {
+                            profileText = profileText.Replace("\\", "");
+                            profile = JsonUtility.FromJson<Profile>(profileText);
+                            onMessage?.Invoke(profile, bodyObject["msg"]?.ToString().Trim());
+                        }
+                    }
 
                     break;
                 case 93102://Donation & Subscription
-                    bdy = (JArray)data["bdy"];
-                    bdyObject = (JObject)bdy[0];
+                    body = (JArray)data["bdy"];
 
-                    //프로필 스트링 변환
-                    profileText = bdyObject["profile"].ToString();
-                    profileText = profileText.Replace("\\", "");
-                    profile = JsonUtility.FromJson<Profile>(profileText);
-
-                    var msgTypeCode = int.Parse(bdyObject["msgTypeCode"].ToString());
-                    //도네이션과 관련된 데이터는 extra
-                    string extraText = null;
-                    if (bdyObject.ContainsKey("extra"))
+                    foreach (JToken jToken in body)
                     {
-                        extraText = bdyObject["extra"].ToString();
-                    }
-                    else if (bdyObject.ContainsKey("extras"))
-                    {
-                        extraText = bdyObject["extras"].ToString();
+                        bodyObject = (JObject)jToken;
+                        
+                        //프로필 스트링 변환
+                        profileText = bodyObject["profile"].ToString();
+                        profileText = profileText.Replace("\\", "");
+                        profile = JsonUtility.FromJson<Profile>(profileText);
+
+                        var msgTypeCode = int.Parse(bodyObject["msgTypeCode"].ToString());
+                        //도네이션과 관련된 데이터는 extra
+                        string extraText = null;
+                        if (bodyObject.TryGetValue("extra", value: out JToken value))
+                        {
+                            extraText = value.ToString();
+                        }
+                        else if (bodyObject.TryGetValue("extras", out JToken value1))
+                        {
+                            extraText = value1.ToString();
+                        }
+
+                        extraText = extraText.Replace("\\", "");
+
+                        switch (msgTypeCode)
+                        {
+                            case 10: // Donation
+                                var donation = JsonUtility.FromJson<DonationExtras>(extraText);
+                                onDonation?.Invoke(profile, bodyObject["msg"].ToString(), donation);
+                                break;
+                            case 11: // Subscription
+                                var subscription = JsonUtility.FromJson<SubscriptionExtras>(extraText);
+                                onSubscription?.Invoke(profile, subscription);
+                                break;
+                            default:
+                                Debug.LogError($"MessageTypeCode-{msgTypeCode} is not supported");
+                                Debug.LogError(bodyObject.ToString());
+                                break;
+                        }
                     }
 
-                    extraText = extraText.Replace("\\", "");
-
-                    switch (msgTypeCode)
-                    {
-                        case 10: // Donation
-                            var donation = JsonUtility.FromJson<DonationExtras>(extraText);
-                            onDonation?.Invoke(profile, bdyObject["msg"].ToString(), donation);
-                            break;
-                        case 11: // Subscription
-                            var subscription = JsonUtility.FromJson<SubscriptionExtras>(extraText);
-                            onSubscription?.Invoke(profile, subscription);
-                            break;
-                        default:
-                            Debug.LogError($"MessageTypeCode-{msgTypeCode} is not supported");
-                            Debug.LogError(bdyObject.ToString());
-                            break;
-                    }
                     break;
                 case 93006://Temporary Restrict 블라인드 처리된 메세지.
                 case 94008://Blocked Message(CleanBot) 차단된 메세지.

@@ -17,11 +17,11 @@ Nuget을 사용하지 않고, 직접 빌드하여 Package에 포함시켜도 됩
 자세한 방법은 [https://github.com/sta/websocket-sharp](https://github.com/sta/websocket-sharp)을 참고하세요.<br><br>
      
 유니티 패키지 관리자에서 <b>Git URL에서 패키지 설치</b>를 선택하여<br>
-UniTask를 설치합니다.<br>
+<b>UniTask</b>를 설치합니다.<br>
 ```https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask```<br><br>
 
 유니티 패키지 관리자에서 <b>이름으로 패키지 설치</b>를 선택하여<br>
-Newtonsoft.Json를 설치합니다.<br>
+<b>Newtonsoft.Json</b>를 설치합니다.<br>
 ```com.unity.nuget.newtonsoft-json```
 
 ChzzkUnity.cs를 원하는 위치에 설치합니다.<br><br>

@@ -7,8 +7,6 @@ using UnityEngine.Events;
 using UnityEngine.Networking;
 using WebSocketSharp;
 using System.Collections;
-using System.Threading.Tasks;
-using Unity.VisualScripting;
 using Cysharp.Threading.Tasks;
 
 public class ChzzkUnity : MonoBehaviour

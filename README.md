@@ -26,6 +26,13 @@ Nuget을 사용하지 않고, 직접 빌드하여 Package에 포함시켜도 됩
 
 ChzzkUnity.cs를 원하는 위치에 설치합니다.<br><br>
 
+
+ChzzkVideoDonationUnity.cs는 기본 기능과 별도로 동작합니다.<br>
+영상 도네이션을 인식할 수 있으며, 어느 한 쪽이 없더라도 동작합니다.<br>
+영상 도네이션 인식을 위해서는 치지직 스튜디오->방송관리->알림->후원 알림에서 찾을 수 있는 영상 후원 안내 URL이 필요합니다.
+
+<br><br>
+
 ## External dependencies
 #### Newtonsoft.Json
 https://www.nuget.org/packages/Newtonsoft.Json/<br>

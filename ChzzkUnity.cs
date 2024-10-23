@@ -88,7 +88,8 @@ public class ChzzkUnity : MonoBehaviour
     //TimeScale에 영향 안 받기 위해서 Fixed
     void FixedUpdate()
     {
-        if (running && socket.IsAlive)
+        //HOTFIX : 성능저하가 너무 심해서 Socket.isAlive 체크 제거
+        if (running)
         {
             timer += Time.unscaledDeltaTime;
             if (timer > 15)
